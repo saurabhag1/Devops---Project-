@@ -1,11 +1,11 @@
 pipeline {
-    agent any 
+    agent any
     tools {
         jdk 'jdk'
         nodejs 'nodejs'
     }
-    environment  {
-        SCANNER_HOME=tool 'sonar-scanner'
+    environment {
+        SCANNER_HOME = tool 'sonar-scanner'
         AWS_ACCOUNT_ID = credentials('ACCOUNT_ID')
         AWS_ECR_REPO_NAME = credentials('ECR_REPO_BACKEND')
         AWS_DEFAULT_REGION = 'us-west-2'
@@ -40,7 +40,7 @@ pipeline {
         stage('Quality Check') {
             steps {
                 script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token' 
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
                 }
             }
         }
@@ -63,9 +63,9 @@ pipeline {
             steps {
                 script {
                     dir('app-code/backend') {
-                            sh 'docker system prune -f'
-                            sh 'docker container prune -f'
-                            sh 'docker build -t ${AWS_ECR_REPO_NAME} .'
+                        sh 'docker system prune -f'
+                        sh 'docker container prune -f'
+                        sh 'docker build -t ${AWS_ECR_REPO_NAME} .'
                     }
                 }
             }
@@ -73,20 +73,15 @@ pipeline {
         stage("ECR Image Pushing") {
             steps {
                 script {
-                        sh 'aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | docker login --username AWS --password-stdin ${REPOSITORY_URI}'
-                        sh 'docker tag ${AWS_ECR_REPO_NAME} ${REPOSITORY_URI}${AWS_ECR_REPO_NAME}:${BUILD_NUMBER}'
-                        sh 'docker push ${REPOSITORY_URI}${AWS_ECR_REPO_NAME}:${BUILD_NUMBER}'
+                    sh 'aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | docker login --username AWS --password-stdin ${REPOSITORY_URI}'
+                    sh 'docker tag ${AWS_ECR_REPO_NAME} ${REPOSITORY_URI}${AWS_ECR_REPO_NAME}:${BUILD_NUMBER}'
+                    sh 'docker push ${REPOSITORY_URI}${AWS_ECR_REPO_NAME}:${BUILD_NUMBER}'
                 }
             }
         }
         stage("TRIVY Image Scan") {
             steps {
-                sh 'trivy image ${REPOSITORY_URI}${AWS_ECR_REPO_NAME}:${BUILD_NUMBER} > trivyimage.txt' 
-            }
-        }
-        stage('Checkout Code') {
-            steps {
-                git branch: 'main', credentialsId: 'GITHUB', url: 'https://github.com/saurabhag1/Devops---Project-.git'
+                sh 'trivy image ${REPOSITORY_URI}${AWS_ECR_REPO_NAME}:${BUILD_NUMBER} > trivyimage.txt'
             }
         }
         stage('Update Deployment file') {
@@ -98,36 +93,36 @@ pipeline {
                 dir('kubernetes-manifests/backend') {
                     withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
                         sh '''
-                    set -e  # अगर कोई कमांड फेल हो तो स्क्रिप्ट वहीं रुक जाए
+                        set -e  # Stop execution if any command fails
 
-                    git config user.email "sourabhagrawal2000@gmail.com"
-                    git config user.name "saurabhag1"
+                        git config user.email "sourabhagrawal2000@gmail.com"
+                        git config user.name "saurabhag1"
 
-                    BUILD_NUMBER=${BUILD_NUMBER}
-                    echo "Current Build Number: $BUILD_NUMBER"
+                        BUILD_NUMBER=${BUILD_NUMBER}
+                        echo "Current Build Number: $BUILD_NUMBER"
 
-                    # ✅ Corrected Image Tag Extraction
-                    imageTag=$(awk -F ':' '/image:/ {print $2}' deployment.yaml | xargs)
-                    echo "Extracted Image Tag: $imageTag"
+                        # ✅ Correct Image Tag Extraction
+                        imageTag=$(awk -F 'image: ' '/image:/ {print $2}' deployment.yaml | xargs)
+                        echo "Extracted Image Tag: $imageTag"
 
-                    # ✅ Validate imageTag (Error Handling)
-                    if [ -z "$imageTag" ]; then
-                        echo "❌ ERROR: Image Tag not found in deployment.yaml"
-                        exit 1
-                    fi
+                        # ✅ Validate imageTag
+                        if [ -z "$imageTag" ]; then
+                            echo "❌ ERROR: Image Tag not found in deployment.yaml"
+                            exit 1
+                        fi
 
-                    # ✅ Corrected sed Command
-                    sed -i "s|${AWS_ECR_REPO_NAME}:${imageTag}|${AWS_ECR_REPO_NAME}:${BUILD_NUMBER}|g" deployment.yaml
+                        # ✅ Update Deployment File with New Image Tag
+                        sed -i "s|${AWS_ECR_REPO_NAME}:${imageTag}|${AWS_ECR_REPO_NAME}:${BUILD_NUMBER}|g" deployment.yaml
 
-                    echo "✅ Updated deployment.yaml with new image tag"
+                        echo "✅ Updated deployment.yaml with new image tag"
 
-                    # ✅ Git Commit & Push
-                    git add deployment.yaml
-                    git commit -m "Update deployment Image to version ${BUILD_NUMBER}"
-                    git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+                        # ✅ Commit & Push Changes
+                        git add deployment.yaml
+                        git commit -m "Update deployment image to version ${BUILD_NUMBER}"
+                        git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
 
-                    echo "✅ Deployment file updated and pushed successfully!"
-                    '''
+                        echo "✅ Deployment file updated and pushed successfully!"
+                        '''
                     }
                 }
             }
