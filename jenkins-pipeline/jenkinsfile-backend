@@ -98,16 +98,35 @@ pipeline {
                 dir('kubernetes-manifests/backend') {
                     withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
                         sh '''
-                            git config user.email "sourabhagrawal2000@gmail.com"
-                            git config user.name "saurabhag1"
-                            BUILD_NUMBER=${BUILD_NUMBER}
-                            echo $BUILD_NUMBER
-                            imageTag=$(grep -oP '(?<=backend:)[^ ]+' deployment.yaml)
-                            echo $imageTag
-                            sed -i "s/${AWS_ECR_REPO_NAME}:${imageTag}/${AWS_ECR_REPO_NAME}:${BUILD_NUMBER}/" deployment.yaml
-                            git add deployment.yaml
-                            git commit -m "Update deployment Image to version \${BUILD_NUMBER}"
-                            git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+                    set -e  # अगर कोई कमांड फेल हो तो स्क्रिप्ट वहीं रुक जाए
+
+                    git config user.email "sourabhagrawal2000@gmail.com"
+                    git config user.name "saurabhag1"
+
+                    BUILD_NUMBER=${BUILD_NUMBER}
+                    echo "Current Build Number: $BUILD_NUMBER"
+
+                    # ✅ Corrected Image Tag Extraction
+                    imageTag=$(awk -F ':' '/image:/ {print $2}' deployment.yaml | xargs)
+                    echo "Extracted Image Tag: $imageTag"
+
+                    # ✅ Validate imageTag (Error Handling)
+                    if [ -z "$imageTag" ]; then
+                        echo "❌ ERROR: Image Tag not found in deployment.yaml"
+                        exit 1
+                    fi
+
+                    # ✅ Corrected sed Command
+                    sed -i "s|${AWS_ECR_REPO_NAME}:${imageTag}|${AWS_ECR_REPO_NAME}:${BUILD_NUMBER}|g" deployment.yaml
+
+                    echo "✅ Updated deployment.yaml with new image tag"
+
+                    # ✅ Git Commit & Push
+                    git add deployment.yaml
+                    git commit -m "Update deployment Image to version ${BUILD_NUMBER}"
+                    git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+
+                    echo "✅ Deployment file updated and pushed successfully!"
                         '''
                     }
                 }
